@@ -1,16 +1,15 @@
-package server;
+package game;
+
+import server.Connection;
+import utils.GameUtils;
 
 public class TimeTick extends Thread {
-	private long time;
-	GameConnection player;
+	Connection player;
 	private boolean isSafe;
 	private boolean isFinished;
 
-	public void setTime(long time) {
-		this.time = time;
-	}
 	
-	public void setPlayer(GameConnection player) {
+	public void setPlayer(Connection player) {
 		this.player = player;
 	}
 	
@@ -28,7 +27,7 @@ public class TimeTick extends Thread {
 		int timer = 5;
 		while(!isSafe) {
 			if(timer>=0) {
-				Game.waitMilliseconds(1000);
+				GameUtils.waitMilliseconds(1000);
 				//player.sendMessage(Integer.toString(timer) + '!' );
 				timer--;
 			}
