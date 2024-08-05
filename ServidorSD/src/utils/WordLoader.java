@@ -5,17 +5,20 @@ import java.io.FileNotFoundException;
 import java.util.HashSet;
 import java.util.Scanner;
 
+import server.TCPServer;
+
 public class WordLoader extends Thread{
 	private static HashSet<String> wordSet;
 	private static boolean isLoaded;
-	
+
 	public WordLoader(){
 		if(wordSet == null) {
-			WordLoader.wordSet = new HashSet<String>();
+			WordLoader.wordSet = new HashSet<>();
 			WordLoader.isLoaded = false;
 		}
 	}
-	
+
+	@Override
 	public void run() {
 		if(wordSet.isEmpty()) {
 			try {
@@ -28,22 +31,22 @@ public class WordLoader extends Thread{
 			      myReader.close();
 			      WordLoader.isLoaded = true;
 			} catch (FileNotFoundException e) {
-			      System.out.println("An error occurred.");
+			      TCPServer.log("ERRO <WordLoader run()>: Arquivo não encontrado");
 			      e.printStackTrace();
 			}
 		}
-		System.out.println("> Arquivo de palavras carregado!");
+		TCPServer.log("Arquivo de palavras carregado");
 	}
-	
+
 	public static boolean isInWordSet(String word){
 		return wordSet.contains(word);
 	}
-	
+
 	public static boolean isLoaded() {
 		return isLoaded;
 	}
-	
-	
-	
-	
+
+
+
+
 }

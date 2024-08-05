@@ -1,66 +1,115 @@
 package server;
 
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.Scanner;
+
 import game.Game;
 import utils.WordLoader;
 
 
 public class TCPServer extends Thread{
-	public static ArrayList<Connection> connections;
-	public static ArrayList<Connection> players;
+	public static Collection<Connection> connections;
 	public static boolean gameStarted;
-	
+
 	TCPServer(){
-		TCPServer.connections = new ArrayList<Connection>();
-		TCPServer.players = new ArrayList<Connection>();
+		TCPServer.connections = Collections.synchronizedList(new ArrayList<>());
 		TCPServer.gameStarted = false;
 	}
-	
+
 	public static void announceMessageAll (String message) {
-		for (Connection connection : connections) {
-			connection.sendMessage(message);
-		}
-	}
-	
-	public static void announceMessageAllExcept(String message, Connection except) {
-		for (Connection connection : connections) {
-			if(connection != except)
+		Iterator<Connection> i = connections.iterator();
+		synchronized (connections) {
+			while(i.hasNext()) {
+				Connection connection = i.next();
+				if(!connection.isConnected()) {
+					i.remove();
+					continue;
+				}
 				connection.sendMessage(message);
+			}
 		}
+		TCPServer.log("ANUNCIADO: \"" + message + "\"");
+	}
+
+	public static void announceMessageAllExcept(String message, Connection except) {
+		Iterator<Connection> i = connections.iterator();
+		synchronized (connections) {
+			while(i.hasNext()) {
+				Connection connection = i.next();
+				if(!connection.isConnected()) {
+					i.remove();
+					continue;
+				}
+				if(!connection.equals(except)) {
+					connection.sendMessage(message);
+				}
+			}
+		}
+		TCPServer.log("ANUNCIADO: \"" + message + "\" EXCETO PARA: "+ except.getInfo().getPlayerName());
+	}
+
+	private static Collection<Connection> getPlayersFromConnections() {
+		Iterator<Connection> i = connections.iterator();
+		Collection<Connection> players = Collections.synchronizedList(new ArrayList<>());
+		synchronized (connections) {
+			while(i.hasNext()) {
+				Connection connection = i.next();
+				if(!connection.isConnected()) {
+					i.remove();
+					continue;
+				}
+				connection.getInfo().resetPoints();
+				connection.setPlaying(true);
+				connection.setTurnActive(false);
+				connection.setSentNewTry(false);
+				connection.setLastTry("");
+				connection.sendMessage("Você está participando do jogo!");
+				players.add(connection);
+			}
+		}
+		return players;
 	}
 	
-	private static void setAllConnectionsPlayers() {
-		for (Connection connection : connections) {
-			players.add(connection);
-			connection.sendMessage("Você está participando do jogo!");
-		}
+	public static void log(String message) {
+		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");  
+		LocalDateTime now = LocalDateTime.now();  
+		System.out.println(dtf.format(now) + " > " + message);
 	}
-	
-	
+
+
+	@Override
 	public void run () {
 		// 49666
 		// netstat -ano | findstr :yourPortNumber
 		// taskkill /pid yourid /f
 		try (Scanner scanner = new Scanner(System.in)) {
 			String msg;
-			System.out.println("> Iniciando server");
-			new WaitPlayers(49666);
-			
+			TCPServer.log("Iniciando server");
+			WaitPlayers waitPlayers = new WaitPlayers(49666);
+			waitPlayers.start();
+			Collection<Connection> players;
+
 			while(true) {
 				if(!TCPServer.gameStarted) {
 					msg = "";
+					announceMessageAll("Um novo jogo iniciará em breve!");
+					TCPServer.log("Digite \"start\" para iniciar um jogo");
 					while(!msg.equals("start")) {
 			    		msg = scanner.nextLine();
 			    	}
-			    	
-			    	setAllConnectionsPlayers();
-			    	
+
+			    	players = getPlayersFromConnections();
+
 			    	announceMessageAll("Jogo começando!");
-			    	System.out.println("> Jogo iniciado");
-			    	
-			    	Game game = new Game();
+			    	TCPServer.log("Jogo iniciado");
+
+			    	Game game = new Game(players);
 			    	game.start();
 			    	TCPServer.gameStarted = true;
 				}
@@ -68,16 +117,15 @@ public class TCPServer extends Thread{
 					try {
 						Thread.sleep(1000);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				}
 			}
 		}
-    	
+
 	}
-	
-	
+
+
     public static void main (String[] args) {
     	TCPServer server = new TCPServer();
     	server.start();

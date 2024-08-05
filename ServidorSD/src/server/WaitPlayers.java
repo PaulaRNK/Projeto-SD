@@ -7,23 +7,25 @@ import java.net.Socket;
 
 public class WaitPlayers extends Thread{
 	private int serverPort;
-	
+
 	public WaitPlayers (int serverPort) {
 		this.serverPort = serverPort;
-		this.start();
 	}
-	
+
+	@Override
 	public void run () {
-		try (
-		ServerSocket listenSocket = new ServerSocket(serverPort)){
-			while(true){
+		try (ServerSocket listenSocket = new ServerSocket(serverPort)) {
+			while(true) {
+				TCPServer.log("Aguardando conexão");
 				Socket clientSocket = listenSocket.accept();
-				System.out.println("> Nova conexão");
+				TCPServer.log("Nova conexão (" + clientSocket.getInetAddress().getHostAddress() + ")");
 				Connection c = new Connection(clientSocket);
-				c.welcomeConnection();
+				c.start();
 			}
-			
-		} 
-		catch(IOException e) {System.out.println("Listen:"+e.getMessage());}
+
+		}
+		catch(IOException e) {
+			TCPServer.log("ERRO <WaitPlayers run>:"+e.getMessage());
+		}
 	}
 }

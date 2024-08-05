@@ -1,7 +1,12 @@
 package game;
 
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
+
 import game.Rules.Rule;
 import game.Rules.RuleStrings;
 import server.Connection;
@@ -10,6 +15,14 @@ import utils.GameUtils;
 import utils.WordLoader;
 
 public class Game extends Thread{
+	private Collection<Connection> players;
+	private int secondsToAnswer;
+
+	public Game(Collection<Connection> players) {
+		this.players = Collections.synchronizedList(new ArrayList<>(players));
+		this.secondsToAnswer = 7;
+	}
+
 	private boolean validateWord(Connection playerConnection, Rule rule, String validator, String triedWord, HashSet<String> usedWords) {
 		triedWord = triedWord.strip().toUpperCase();
 		if(triedWord.isBlank()) {
@@ -20,7 +33,7 @@ public class Game extends Thread{
 			playerConnection.sendMessage("Sua palavra não pode conter caractéres especiais!");
 			return false;
 		}
-		if(!rule.getVerification(validator, triedWord)) {
+		if(!rule.getVerification(triedWord, validator)) {
 			playerConnection.sendMessage("Sua palavra não segue a regra!");
 			return false;
 		}
@@ -34,69 +47,100 @@ public class Game extends Thread{
 		}
 		return true;
 	}
-	
+
+	@Override
 	public void run () {
-		if(TCPServer.players.size()==0) {
-			System.out.println("Não há players para jogar");
+		if(players.size()==0) {
+			TCPServer.log("GAME: Não há jogadores suficientes para começar a partida");
 			TCPServer.gameStarted = false;
 			return;
 		}
-		
+
+		HashSet<String> usedWords = new HashSet<>();
 		String lastWord = "ROLETA";
 		boolean isValid = false;
-		HashSet<String> usedWords = new HashSet<>();
-		Rule rule;
-		RuleStrings ruleStrings;
-		int secondsToAnswer = 5;
 		long startingTime;
 		String triedWord = "";
-		
-		while(TCPServer.players.size() > 1) {
-			for(Connection playerConnection : TCPServer.players) {
-				TCPServer.announceMessageAllExcept("É a vez de " + playerConnection.player.getPlayerName() + "!", playerConnection);
-				playerConnection.sendMessage(playerConnection.player.getPlayerName() + ", é a sua vez!");
-				
-				rule = GameUtils.getValidRule(lastWord);
-				ruleStrings = rule.getRule(lastWord);
-				
-				TCPServer.announceMessageAllExcept("\n" + playerConnection.player.getPlayerName() + "deverá escrever uma palavra que " + ruleStrings.getRuleText(), playerConnection);
-				playerConnection.sendMessage("\n" + playerConnection.player.getPlayerName() + ", escreva uma palavra que " + ruleStrings.getRuleText());
-				
-				
-				/*
-				TimeTick timeTick = new TimeTick();
-				isValid = false;
-				timeTick.setTime(System.currentTimeMillis());
-				timeTick.setPlayer(player);
-				timeTick.start();*/
-				
-				startingTime = System.currentTimeMillis();
-				isValid = false;
-				playerConnection.player.setTurnActive(true);
-				while(!isValid && System.currentTimeMillis()>startingTime+secondsToAnswer*1000 && playerConnection.player.isPlaying()) {
-					triedWord = playerConnection.player.getLastWord();
-					isValid = validateWord(playerConnection, 
-							rule, 
-							ruleStrings.getRuleVerificationText(), 
-							triedWord, 
-							usedWords);
+		Rule rule;
+		RuleStrings ruleStrings;
+
+		synchronized (players) {
+			while(players.size() > 1) {
+				Iterator<Connection> i = players.iterator();
+				while(i.hasNext()) {
+					Connection player = i.next();
+					if(!player.isConnected()) {
+						i.remove();
+						continue;
+					}
+
+					player.setTurnActive(true);
+
+					TCPServer.announceMessageAllExcept("É a vez de " + player.getInfo().getPlayerName() + "!", player);
+					player.sendMessage(player.getInfo().getPlayerName() + ", é a sua vez!");
+
+					rule = GameUtils.getValidRule(lastWord.toUpperCase());
+					ruleStrings = rule.getRule(lastWord.toUpperCase());
+
+					TCPServer.announceMessageAllExcept("\n" + player.getInfo().getPlayerName() + " deverá escrever uma palavra que " + ruleStrings.getRuleText(), player);
+					player.sendMessage("\n" + player.getInfo().getPlayerName() + ", escreva uma palavra que " + ruleStrings.getRuleText());
+
+					GameUtils.waitMilliseconds(800);
+
+					startingTime = System.currentTimeMillis();
+					isValid = false;
+					while(	(!isValid)
+							&& (System.currentTimeMillis()<= (startingTime+secondsToAnswer*1000))
+							&& (player.isConnected())) {
+						if(player.sentNewTry()) {
+							triedWord = player.getLastTry();
+							isValid = validateWord(player,
+								rule,
+								ruleStrings.getRuleVerificationText(),
+								triedWord,
+								usedWords);
+							player.setSentNewTry(false);
+						}
+						try {
+							Thread.sleep(100);
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+					}
+					if(isValid) {
+						TCPServer.log("GAME: " + player.getInfo().getPlayerName() + " enviou a palavra válida \"" + triedWord + "\"");
+						lastWord = triedWord.toUpperCase();
+						usedWords.add(lastWord);
+						player.sendMessage("VOCÊ CONSEGUIU!");
+						player.getInfo().addPoints();
+						TCPServer.announceMessageAllExcept(player.getInfo().getPlayerName() + " CONSEGUIU COM A PALAVRA: " + triedWord, player);
+					}
+					else{
+						if(player.isConnected()) {
+							TCPServer.log("GAME: " + player.getInfo().getPlayerName() + " perdeu");
+							player.sendMessage("VOCÊ MORREU! PONTUAÇÃO FINAL: " + player.getInfo().getPoints());
+						}
+						else 
+							TCPServer.log("GAME: " + player.getInfo().getPlayerName() + " se desconectou durante a sua vez");
+						TCPServer.announceMessageAllExcept(player.getInfo().getPlayerName() + " MORREU. PONTUAÇÃO FINAL: " + player.getInfo().getPoints(), player);
+						i.remove();
+						player.setPlaying(false);
+					}
+					player.setTurnActive(false);
 				}
-				if(isValid) {  
-					playerConnection.sendMessage("VOCÊ CONSEGUIU!");
-					playerConnection.player.addPoints();
-					TCPServer.announceMessageAllExcept(playerConnection.player.getPlayerName() + " CONSEGUIU COM A PALAVRA: " + triedWord, playerConnection);
-				}
-				else{
-					playerConnection.sendMessage("VOCÊ MORREU! PONTUAÇÃO FINAL: " + playerConnection.player.getPoints());
-					TCPServer.announceMessageAllExcept(playerConnection.player.getPlayerName() + " MORREU. PONTUAÇÃO FINAL: " + playerConnection.player.getPoints(), playerConnection);
-					TCPServer.players.remove(playerConnection);
-					playerConnection.player.setPlaying(false);
-				}
-				playerConnection.player.setTurnActive(false);
 			}
+			Iterator<Connection> i = players.iterator();
+			if(i.hasNext()) {
+				Connection player = i.next();
+				TCPServer.announceMessageAll("\n" + player.getInfo().getPlayerName() + " VENCEU!!! PONTUAÇÃO FINAL: " + player.getInfo().getPoints());
+			}
+			else {
+				TCPServer.announceMessageAll("JOGO FINALIZADO.");
+			}
+			players.clear();
+			TCPServer.gameStarted = false;
+			TCPServer.log("GAME: Partida finalizada");
 		}
-		TCPServer.announceMessageAll(TCPServer.players.get(0).player.getPlayerName() + " VENCEU!!! PONTUAÇÃO FINAL: " + TCPServer.players.get(0).player.getPoints());
-		TCPServer.players.remove(TCPServer.players.get(0));
-		TCPServer.gameStarted = false;
+
 	}
 }
