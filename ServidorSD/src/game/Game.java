@@ -20,7 +20,7 @@ public class Game extends Thread{
 
 	public Game(Collection<Connection> players) {
 		this.players = Collections.synchronizedList(new ArrayList<>(players));
-		this.secondsToAnswer = 7;
+		this.secondsToAnswer = 15;
 	}
 
 	private boolean validateWord(Connection playerConnection, Rule rule, String validator, String triedWord, HashSet<String> usedWords) {
@@ -29,7 +29,7 @@ public class Game extends Thread{
 			playerConnection.sendMessage("Escreva alguma coisa!");
 			return false;
 		}
-		if(!triedWord.matches("[a-zA-ZçáéíóúÁÉÍÓÚãõâêîôûàèìòùçÇ]+")) {
+		if(!triedWord.matches("[a-zA-ZçáéíóúÁÉÍÓÚãõÃÕâêîôûÂÊÎÔÛÀÈÌÒÙàèìòùçÇ]+")) {
 			playerConnection.sendMessage("Sua palavra não pode conter caractéres especiais!");
 			return false;
 		}
@@ -55,7 +55,7 @@ public class Game extends Thread{
 			TCPServer.gameStarted = false;
 			return;
 		}
-
+		
 		HashSet<String> usedWords = new HashSet<>();
 		String lastWord = "ROLETA";
 		boolean isValid = false;
@@ -63,10 +63,17 @@ public class Game extends Thread{
 		String triedWord = "";
 		Rule rule;
 		RuleStrings ruleStrings;
-
+		Iterator<Connection> i;
 		synchronized (players) {
+			i = players.iterator();
+			String playersString = "";
+			while(i.hasNext()) {
+				playersString += i.next().getInfo().getPlayerName() + "\n";
+			}
+			TCPServer.announceMessageAll("JOGADORES: " + playersString);
+			
 			while(players.size() > 1) {
-				Iterator<Connection> i = players.iterator();
+				i = players.iterator();
 				while(i.hasNext()) {
 					Connection player = i.next();
 					if(!player.isConnected()) {
@@ -129,7 +136,7 @@ public class Game extends Thread{
 					player.setTurnActive(false);
 				}
 			}
-			Iterator<Connection> i = players.iterator();
+			i = players.iterator();
 			if(i.hasNext()) {
 				Connection player = i.next();
 				TCPServer.announceMessageAll("\n" + player.getInfo().getPlayerName() + " VENCEU!!! PONTUAÇÃO FINAL: " + player.getInfo().getPoints());

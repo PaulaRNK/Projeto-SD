@@ -4,6 +4,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 
 import game.Info;
 
@@ -58,7 +60,7 @@ public class Connection extends Thread {
 		try {
 			out.writeUTF(message + "\n");
 		} catch (IOException e) {
-			e.printStackTrace();
+			TCPServer.log("ERRO <Connection sendMessage>: " + e.getMessage());
 		}
 	}
 
@@ -66,9 +68,11 @@ public class Connection extends Thread {
 	@Override
 	public void run() {
 		String message = "";
+		
 		try {
 			this.welcomeConnection();
-			while((message = in.readUTF())!=null && message!="/exit") {
+			
+			while((message = in.readUTF())!=null && !message.contentEquals(".sair")) {
 				TCPServer.log(clientSocket.getInetAddress().getHostAddress() + " -> " + this.info.getPlayerName() + " enviou \"" + message + "\"");
 				if(this.isTurnActive()) {
 					this.setLastTry(message);
@@ -78,7 +82,7 @@ public class Connection extends Thread {
 				try {
 					Thread.sleep(100);
 				} catch (InterruptedException e) {
-					e.printStackTrace();
+					TCPServer.log("ERRO <Connection run>: " + e.getMessage());
 				}
 			}
 			this.clientSocket.close();
